@@ -45,14 +45,22 @@ def start(bot, update):
                           "the messages and send a daily digest "
                           "in a mailing list of your choice.")
     if update.message.chat_id not in config:
-        config[update.message.chat_id] = {'mailinglist': '', 'from': ''}
+        config[update.message.chat_id] = {'name': update.message.chat.title,
+                                          'mailinglist': '', 'from': ''}
+
+
+def dumpconfig(bot, update):
+    for k, v in config.items():
+        print k
+        for kk, vv in config[k].items():
+            print kk, ":", vv
 
 
 def mailinglist(bot, update):
     logging.debug("Received message: " + str(update))
     email = parsemail(update.message.text)
     if email:
-        config[update.message.chat_id] = {'mailinglist': email}
+        config[update.message.chat_id]['mailinglist'] = email
         bot.sendMessage(chat_id=update.message.chat_id,
                         text="OK, " + email +
                              "was saved as the mailinglist address")
@@ -66,7 +74,7 @@ def fromaddress(bot, update):
     logging.debug("Received message: " + str(update))
     email = parsemail(update.message.text)
     if email:
-        config[update.message.chat_id] = {'fromaddress': email}
+        config[update.message.chat_id]['fromaddress'] = email
         bot.sendMessage(chat_id=update.message.chat_id,
                         text="OK, " + email +
                              "was saved as the from address")
@@ -91,6 +99,8 @@ mailinglist_handler = CommandHandler('mailinglist', mailinglist)
 dispatcher.add_handler(mailinglist_handler)
 fromaddress_handler = CommandHandler('from', fromaddress)
 dispatcher.add_handler(fromaddress_handler)
+dumpconfig_handler = CommandHandler('dumpconfig', dumpconfig)
+dispatcher.add_handler(dumpconfig_handler)
 
 unknown_handler = MessageHandler(Filters.command, unknown)
 dispatcher.add_handler(unknown_handler)
