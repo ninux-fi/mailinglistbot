@@ -84,6 +84,13 @@ def fromaddress(bot, update):
                              " is not a valid address")
 
 
+def messagestore(bot, update):
+    text = update.message.text
+    sender = update.message.from_user.username
+    print sender
+    print "  ", text
+
+
 def unknown(bot, update):
         bot.sendMessage(chat_id=update.message.chat_id,
                         text="Sorry, I didn't understand that command.")
@@ -105,5 +112,7 @@ dispatcher.add_handler(dumpconfig_handler)
 unknown_handler = MessageHandler(Filters.command, unknown)
 dispatcher.add_handler(unknown_handler)
 
+message_handler = MessageHandler(Filters.text, messagestore)
+dispatcher.add_handler(message_handler)
 
 updater.start_polling()
