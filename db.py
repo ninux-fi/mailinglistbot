@@ -119,5 +119,18 @@ def setup_db(dbfile):
         pass
 
 
+def dumpmessages(group_id, fromdate=datetime.datetime.min,
+                 todate=datetime.datetime.max):
+    msgs = message.select(user.username, message.fromuser, message.text,
+                          message.timesent).join(user).where(
+                                  message.groupid == group_id,
+                                  message.timesent < todate,
+                                  message.timesent > fromdate)
+    msg_list = []
+    for m in msgs.naive():
+        msg_list.append((m.username, m.timesent, m.text))
+    return sorted(msg_list, key=lambda x: x[1])
+
+
 def close_db():
     db.close()

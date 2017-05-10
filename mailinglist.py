@@ -118,10 +118,17 @@ def messagehandler(bot, update):
                        update.message.text, update.message.chat.title,
                        update.message.from_user.id)
 
+def dumpmessages(bot, update):
+    chat_id = update.message.chat.id
+    msgs = db.dumpmessages(chat_id)
+    for m in msgs:
+        print m[0], m[1], m[2]
 
 def unknown(bot, update):
         bot.sendMessage(chat_id=update.message.chat_id,
                         text="Sorry, I didn't understand that command.")
+
+
 
 parse_arguments()
 updater = Updater(token=apitoken)
@@ -136,6 +143,8 @@ fromaddress_handler = CommandHandler('from', fromaddress)
 dispatcher.add_handler(fromaddress_handler)
 dumpconfig_handler = CommandHandler('dumpconfig', dumpconfig)
 dispatcher.add_handler(dumpconfig_handler)
+dumpmessages_handler = CommandHandler('messages', dumpmessages)
+dispatcher.add_handler(dumpmessages_handler)
 
 unknown_handler = MessageHandler(Filters.command, unknown)
 dispatcher.add_handler(unknown_handler)
