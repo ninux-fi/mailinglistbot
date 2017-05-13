@@ -183,14 +183,15 @@ def sendmessages(bot, update):
     fr, ml = db.getaddresses(update.message.chat.id)
     m = dumpmessages(bot, update)
     sendemail(m, "", fr, ml)
+    logger.info("Send digest email for group "+str(update.message.chat.id))
 
 
 def sendemail(body, groupname, fromemail, mailinglist):
 
     msg = MIMEText(body)
 
-    msg['Subject'] = "[mailinglistbot] Digest conversations from",\
-                     "Telegram group", groupname
+    msg['Subject'] = "[mailinglistbot] Digest conversations from"\
+                     " Telegram group " + groupname
     msg['From'] = fromemail
     msg['To'] = mailinglist
 
