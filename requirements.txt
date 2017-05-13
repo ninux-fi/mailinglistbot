@@ -1,0 +1,8 @@
+python-telegram-bot
+validate_email
+logging
+argparse
+datetime
+peewee
+schedule
+email
