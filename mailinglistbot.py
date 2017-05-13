@@ -30,6 +30,10 @@ def parse_arguments():
                         help="Log to file instead of stdout",
                         action="store", dest="logfile", default=None)
 
+    parser.add_argument('-t',
+                        help="Send digest emails every X minutes",
+                        action="store", dest="sendinterval", default=1440)
+
     args = parser.parse_args()
 
     if args.db:
@@ -49,6 +53,8 @@ def parse_arguments():
 
     if args.verb:
         logger.setLevel((50 - args.verb*10))
+
+    schedule.every(args.sendinterval).minutes().do(senddigest)
 
 
 def parsemail(mail_string):
@@ -153,6 +159,10 @@ def prettyprintright(ul, u, d, s):
         print >> s, "".ljust(left_margin+1), "|", line.ljust(line_width), "|"
 
 
+#  TODO need to refactor these functions, handlers will take the
+#  update/bot input, and call other functions that take IDs as input
+#  so I can call the second kind of function also from the scheduler
+
 def dumpmessages(bot, update):
     chat_id = update.message.chat.id
     msgs = db.dumpmessages(chat_id)
@@ -182,8 +192,12 @@ def unknown(bot, update):
                         text="Sorry, I didn't understand that command.")
 
 
-def sendmessages(bot, update):
-    fr, ml = db.getaddresses(update.message.chat.id)
+def sendmessages(bot, update, chat_id=None):
+
+    if not chat_id:
+        fr, ml = db.getaddresses(update.message.chat.id)
+    else:
+        fr, ml = db.getaddresses(chat_id)
     m = dumpmessages(bot, update)
     sendemail(m, "", fr, ml)
     logger.info("Sent digest email for group "+str(update.message.chat.id))
@@ -208,6 +222,12 @@ def sendemail(body, groupname, fromemail, mailinglist):
         s.quit()
     except:
         logger.error("Could not send email!")
+
+
+def senddigest():
+    groups = db.get_active_groups()
+    for g in groups:
+        sendmessages("", "", g)
 
 
 def run():

@@ -94,6 +94,11 @@ def delgroup(chat_id):
     g.delete_instance()
 
 
+def get_active_groups():
+    m = config.select(config.id).where(config.enable == True)
+    return [g.id for g in m]
+
+
 def savegroup(chat_id, title):
 
     try:
