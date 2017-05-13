@@ -73,6 +73,7 @@ def start(bot, update):
                          "the messages and send a daily digest "
                          "in a mailing list of your choice.")
 
+
 def mailinglist(bot, update):
     logging.debug("Received message: " + str(update))
     email = parsemail(update.message.text)
@@ -82,6 +83,7 @@ def mailinglist(bot, update):
         bot.sendMessage(chat_id=update.message.chat_id,
                         text="OK, " + email +
                              " was saved as the mailinglist address")
+        logger.info("Changed mailinglist address to "+email)
     else:
         bot.sendMessage(chat_id=update.message.chat_id,
                         text="Not OK: " + update.message.text +
@@ -97,6 +99,7 @@ def fromaddress(bot, update):
         bot.sendMessage(chat_id=update.message.chat_id,
                         text="OK, " + email +
                              " was saved as the from address")
+        logger.info("Changed from address to "+email)
     else:
         bot.sendMessage(chat_id=update.message.chat_id,
                         text="Not OK: " + update.message.text +
@@ -183,7 +186,7 @@ def sendmessages(bot, update):
     fr, ml = db.getaddresses(update.message.chat.id)
     m = dumpmessages(bot, update)
     sendemail(m, "", fr, ml)
-    logger.info("Send digest email for group "+str(update.message.chat.id))
+    logger.info("Sent digest email for group "+str(update.message.chat.id))
 
 
 def sendemail(body, groupname, fromemail, mailinglist):
@@ -205,8 +208,6 @@ def sendemail(body, groupname, fromemail, mailinglist):
         s.quit()
     except:
         logger.error("Could not send email!")
-	raise
-
 
 
 def run():
