@@ -200,10 +200,11 @@ def sendemail(body, groupname, fromemail, mailinglist):
         logger.error("Could not open socket to localhost:25."
                      " Is SMTP running on this server?")
     try:
-        s.sendmail(msg['From'], [msg['To']], msg.as_strng())
+        s.sendmail(msg['From'], [msg['To']], msg.as_string())
         s.quit()
     except:
         logger.error("Could not send email!")
+	raise
 
 
 
