@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 from telegram.ext import Updater
 from apitoken import apitoken, my_user_id
-from telegram.ext import CommandHandler, MessageHandler, Filters
+from telegram.ext import CommandHandler, MessageHandler, Filters, Job
 from collections import defaultdict
 from validate_email import validate_email
 import re
@@ -10,13 +10,16 @@ import argparse
 import db
 from cStringIO import StringIO
 import datetime
-import schedule
 import smtplib
 from email.mime.text import MIMEText
 
-config = defaultdict(dict)
-logger = logging.getLogger()
+# Globals
 
+logger = logging.getLogger()
+args = None
+
+
+# Helper functions
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -32,7 +35,8 @@ def parse_arguments():
 
     parser.add_argument('-t',
                         help="Send digest emails every X minutes",
-                        action="store", dest="sendinterval", default=1440)
+                        action="store", dest="sendinterval", default=1440,
+                        type=int)
 
     args = parser.parse_args()
 
@@ -54,8 +58,6 @@ def parse_arguments():
     if args.verb:
         logger.setLevel((50 - args.verb*10))
 
-    schedule.every(args.sendinterval).minutes().do(senddigest)
-
 
 def parsemail(mail_string):
 
@@ -72,9 +74,101 @@ def parsemail(mail_string):
     return ''
 
 
+def prettyprintleft(ul, u, d, s):
+    l = ul.encode('ascii', 'ignore').encode('ascii')
+    left_margin = 32  # max username width
+    if d:
+        print >> s, ""
+        print >> s, d[:left_margin-1].ljust(left_margin+1)
+    print >> s, u.rjust(left_margin+1),
+    line_width = 40
+    first_line = l[0:line_width]
+    print >> s, "|", first_line.ljust(line_width), "|"
+    for line in [l[i:i+line_width] for i in range(line_width, len(l), line_width)]:
+        print >> s, "".ljust(left_margin+1), "|", line.ljust(line_width), "|"
+
+
+def prettyprintright(ul, u, d, s):
+
+    l = ul.encode('ascii', 'ignore').encode('ascii')
+    left_margin = 32  # max username width
+    if d:
+        print >> s, ""
+        print >> s, d[:left_margin-1].ljust(left_margin+1)
+    print >> s, "".rjust(left_margin+1),
+    line_width = 40
+    first_line = l[0:line_width]
+    print >> s, "|", first_line.ljust(line_width), "|", u
+    for line in [l[i:i+line_width] for i in range(line_width, len(l),
+                                                  line_width)]:
+        print >> s, "".ljust(left_margin+1), "|", line.ljust(line_width), "|"
+
+
+def dumpmessages(chat_id):
+    msgs = db.dumpmessages(chat_id)
+    s = StringIO()
+    left = True
+    if len(msgs):
+        prettyprintleft(msgs[0][2], msgs[0][0], str(msgs[0][1]), s)
+    if len(msgs) > 1:
+        for i in range(1, len(msgs)):
+            if msgs[i-1][0] != msgs[i][0]:
+                left = not left
+            if msgs[i][1] - msgs[i-1][1] > datetime.timedelta(0, 300):
+                datesent = str(msgs[i][1])
+            else:
+                datesent = ""
+
+            if left:
+                prettyprintleft(msgs[i][2], msgs[i][0], datesent, s)
+            else:
+                prettyprintright(msgs[i][2], msgs[i][0], datesent, s)
+    return s.getvalue()
+
+
+def sendmessages(chat_id):
+
+    fr, ml = db.getaddresses(chat_id)
+    m = dumpmessages(chat_id)
+    sendemail(m, "", fr, ml)
+    logger.info("Sent digest email for group "+str(chat_id))
+
+
+def sendemail(body, groupname, fromemail, mailinglist):
+
+    msg = MIMEText(body)
+
+    msg['Subject'] = "[mailinglistbot] Digest conversations from"\
+                     " Telegram group " + groupname
+    msg['From'] = fromemail
+    msg['To'] = mailinglist
+
+    try:
+        s = smtplib.SMTP('localhost')
+    except:
+        logger.error("Could not open socket to localhost:25."
+                     " Is SMTP running on this server?")
+    try:
+        s.sendmail(msg['From'], [msg['To']], msg.as_string())
+        s.quit()
+    except:
+        logger.error("Could not send email!")
+
+
+def senddigest(bot=None, job=None):
+    groups = db.get_active_groups()
+    print groups
+    logger.info("Starting to send digest messages")
+    for g in groups:
+        sendmessages(g)
+
+
+# Message/Command handlers
+
+
 def start(bot, update):
     bot.sendMessage(chat_id=update.message.chat_id,
-                    text="Hello, if you include me as an admin "
+                    text="Hello, if you include me "
                          "to a telegram group, i will read all "
                          "the messages and send a daily digest "
                          "in a mailing list of your choice.")
@@ -112,14 +206,23 @@ def fromaddress(bot, update):
                              " is not a valid address")
 
 
-def messagehandler(bot, update):
+def messagehandler(bot, update, job_queue, chat_data):
 
-    if update.message.new_chat_member:
-        if update.message.new_chat_member.id == my_user_id:
+    # FIXME we need a Filter for this, not do it here
+    if update.message.new_chat_member and update.message.new_chat_member.id \
+            == my_user_id or update.message.group_chat_created:
             db.savegroup(update.message.chat_id, update.message.chat.title)
+            # FIXME translate into minutes
+            job = Job(senddigest, 10, repeat=True)
+            chat_data['job'] = job
+            job_queue.put(job)
     elif update.message.left_chat_member:
         if update.message.left_chat_member.id == my_user_id:
             db.delgroup(update.message.chat_id)
+            if 'job' in chat_data:
+                job = chat_data['job']
+                job.schedule_removel()
+                del chat_data['job']
 
 
 def texthandler(bot, update):
@@ -130,61 +233,9 @@ def texthandler(bot, update):
                        update.message.from_user.id)
 
 
-def prettyprintleft(ul, u, d, s):
-    l = ul.encode('ascii', 'ignore').encode('ascii')
-    left_margin = 32  # max username width
-    if d:
-        print >> s, ""
-        print >> s, d[:left_margin-1].ljust(left_margin+1)
-    print >> s, u.rjust(left_margin+1),
-    line_width = 40
-    first_line = l[0:line_width]
-    print >> s, "|", first_line.ljust(line_width), "|"
-    for line in [l[i:i+line_width] for i in range(line_width, len(l), line_width)]:
-        print >> s, "".ljust(left_margin+1), "|", line.ljust(line_width), "|"
-
-
-def prettyprintright(ul, u, d, s):
-
-    l = ul.encode('ascii', 'ignore').encode('ascii')
-    left_margin = 32  # max username width
-    if d:
-        print >> s, ""
-        print >> s, d[:left_margin-1].ljust(left_margin+1)
-    print >> s, "".rjust(left_margin+1),
-    line_width = 40
-    first_line = l[0:line_width]
-    print >> s, "|", first_line.ljust(line_width), "|", u
-    for line in [l[i:i+line_width] for i in range(line_width, len(l), line_width)]:
-        print >> s, "".ljust(left_margin+1), "|", line.ljust(line_width), "|"
-
-
-#  TODO need to refactor these functions, handlers will take the
-#  update/bot input, and call other functions that take IDs as input
-#  so I can call the second kind of function also from the scheduler
-
-def dumpmessages(bot, update):
+def dumpmessages_h(bot, update):
     chat_id = update.message.chat.id
-    msgs = db.dumpmessages(chat_id)
-    s = StringIO()
-    left = True
-    if len(msgs):
-        prettyprintleft(msgs[0][2], msgs[0][0], str(msgs[0][1]), s)
-    if len(msgs) > 1:
-        for i in range(1, len(msgs)):
-            if msgs[i-1][0] != msgs[i][0]:
-                left = not left
-            if msgs[i][1] - msgs[i-1][1] > datetime.timedelta(0, 300):
-                datesent = str(msgs[i][1])
-            else:
-                datesent = ""
-
-            if left:
-                prettyprintleft(msgs[i][2], msgs[i][0], datesent, s)
-            else:
-                prettyprintright(msgs[i][2], msgs[i][0], datesent, s)
-    print s.getvalue()
-    return s.getvalue()
+    return dumpmessages(chat_id)
 
 
 def unknown(bot, update):
@@ -192,42 +243,13 @@ def unknown(bot, update):
                         text="Sorry, I didn't understand that command.")
 
 
-def sendmessages(bot, update, chat_id=None):
+def sendmessages_h(bot, update):
 
-    if not chat_id:
-        fr, ml = db.getaddresses(update.message.chat.id)
-    else:
-        fr, ml = db.getaddresses(chat_id)
-    m = dumpmessages(bot, update)
-    sendemail(m, "", fr, ml)
-    logger.info("Sent digest email for group "+str(update.message.chat.id))
+    senddigest()
+    #chat_id = update.message.chat.id
+    #sendmessages(chat_id)
 
-
-def sendemail(body, groupname, fromemail, mailinglist):
-
-    msg = MIMEText(body)
-
-    msg['Subject'] = "[mailinglistbot] Digest conversations from"\
-                     " Telegram group " + groupname
-    msg['From'] = fromemail
-    msg['To'] = mailinglist
-
-    try:
-        s = smtplib.SMTP('localhost')
-    except:
-        logger.error("Could not open socket to localhost:25."
-                     " Is SMTP running on this server?")
-    try:
-        s.sendmail(msg['From'], [msg['To']], msg.as_string())
-        s.quit()
-    except:
-        logger.error("Could not send email!")
-
-
-def senddigest():
-    groups = db.get_active_groups()
-    for g in groups:
-        sendmessages("", "", g)
+# main function
 
 
 def run():
@@ -241,9 +263,9 @@ def run():
     dispatcher.add_handler(mailinglist_handler)
     fromaddress_handler = CommandHandler('from', fromaddress)
     dispatcher.add_handler(fromaddress_handler)
-    dumpmessages_handler = CommandHandler('messages', dumpmessages)
+    dumpmessages_handler = CommandHandler('messages', dumpmessages_h)
     dispatcher.add_handler(dumpmessages_handler)
-    sendmessages_handler = CommandHandler('sendmessages', sendmessages)
+    sendmessages_handler = CommandHandler('sendmessages', sendmessages_h)
     dispatcher.add_handler(sendmessages_handler)
 
     unknown_handler = MessageHandler(Filters.command, unknown)
@@ -252,7 +274,8 @@ def run():
     text_handler = MessageHandler(Filters.text, texthandler)
     dispatcher.add_handler(text_handler)
 
-    message_handler = MessageHandler(Filters.all, messagehandler)
+    message_handler = MessageHandler(Filters.all, messagehandler,
+                                     pass_job_queue=True, pass_chat_data=True)
     dispatcher.add_handler(message_handler)
 
     updater.start_polling()

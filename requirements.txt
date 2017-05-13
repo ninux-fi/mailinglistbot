@@ -4,5 +4,4 @@ logging
 argparse
 datetime
 peewee
-schedule
 email

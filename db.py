@@ -95,8 +95,8 @@ def delgroup(chat_id):
 
 
 def get_active_groups():
-    m = config.select(config.id).where(config.enable == True)
-    return [g.id for g in m]
+    m = config.select(config.groupid).where(config.enabled)
+    return [g.groupid for g in m]
 
 
 def savegroup(chat_id, title):
@@ -142,7 +142,7 @@ def getaddresses(group_id):
     try:
         c = config.select(config.fromemail, config.mailinglist).where(
                       config.groupid_id == group_id,
-                      config.enabled == True)[0]
+                      config.enabled)[0]
     except config.DoesNotExist:
         return None, None
     return c.fromemail, c.mailinglist
