@@ -132,5 +132,16 @@ def dumpmessages(group_id, fromdate=datetime.datetime.min,
     return sorted(msg_list, key=lambda x: x[1])
 
 
+def getaddresses(group_id):
+    # TODO need a join to return also group name
+    try:
+        c = config.select(config.fromemail, config.mailinglist).where(
+                      config.groupid_id == group_id,
+                      config.enabled == True)[0]
+    except config.DoesNotExist:
+        return None, None
+    return c.fromemail, c.mailinglist
+
+
 def close_db():
     db.close()
