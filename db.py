@@ -22,9 +22,9 @@ class telegramgroup(BaseModel):
 class config(BaseModel):
     groupid = ForeignKeyField(telegramgroup, primary_key=True,
                               to_field='groupid')
-    fromemail = CharField(default="")
+    fromemail = CharField(default="bot@firenze.ninux.network")
     mailinglist = CharField(default="")
-    enabled = BooleanField(default=True)
+    enabled = BooleanField(default=False)
 
 
 class user(BaseModel):
@@ -94,6 +94,30 @@ def delgroup(chat_id):
     g.delete_instance()
 
 
+def enable(chat_id):
+
+    try:
+        c = config.get(config.groupid == chat_id)
+    except:
+        return False
+    c.enabled = True
+    c.save()
+    return True
+
+
+def disable(chat_id):
+
+    try:
+        c = config.get(config.groupid == chat_id)
+    except:
+        return False
+    c.enabled = False
+    c.save()
+    return True
+
+
+
+
 def get_active_groups():
     m = config.select(config.groupid).where(config.enabled)
     return [g.groupid for g in m]
@@ -139,13 +163,12 @@ def dumpmessages(group_id, fromdate=datetime.datetime.min,
 
 def getaddresses(group_id):
     # TODO need a join to return also group name
-    try:
-        c = config.select(config.fromemail, config.mailinglist).where(
-                      config.groupid_id == group_id,
-                      config.enabled)[0]
-    except config.DoesNotExist:
-        return None, None
-    return c.fromemail, c.mailinglist
+    c = config.select(config.fromemail, config.mailinglist,
+                  config.enabled).where(
+                  config.groupid_id == group_id)
+    if not c:
+        return None, None, None
+    return c[0].fromemail, c[0].mailinglist, c[0].enabled
 
 
 def close_db():

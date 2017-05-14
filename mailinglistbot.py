@@ -17,7 +17,7 @@ from email.mime.text import MIMEText
 
 logger = logging.getLogger()
 args = None
-
+sendinterval = 1440
 
 # Helper functions
 
@@ -39,6 +39,9 @@ def parse_arguments():
                         type=int)
 
     args = parser.parse_args()
+
+    global sendinterval
+    sendinterval = args.sendinterval
 
     if args.db:
         db.setup_db(args.db)
@@ -128,13 +131,14 @@ def dumpmessages(chat_id):
 
 def sendmessages(chat_id):
 
-    fr, ml = db.getaddresses(chat_id)
-    if fr and ml:
+    fr, ml, enabled = db.getaddresses(chat_id)
+    if fr and ml and enabled:
         m = dumpmessages(chat_id)
         sendemail(m, "", fr, ml)
         logger.info("Sent digest email for group "+str(chat_id))
     else:
-        logger.info("Won't send email, as I am missing addresses for group "+str(chat_id))
+        logger.info("Won't send email, as I am missing addresses for group " +
+                    str(chat_id) + " or conf is disabled")
 
 
 def sendemail(body, groupname, fromemail, mailinglist):
@@ -194,6 +198,8 @@ def mailinglist(bot, update):
 
 
 def fromaddress(bot, update):
+    pass
+    # I decided to keep the from email static to bot@firenze.ninux.network
     logging.debug("Received message: " + str(update))
     email = parsemail(update.message.text)
     if email:
@@ -209,24 +215,15 @@ def fromaddress(bot, update):
                              " is not a valid address")
 
 
-def messagehandler(bot, update, job_queue, chat_data):
+def messagehandler(bot, update):
 
     # FIXME we need a Filter for this, not do it here
-    # FIXME: we also need an /enable command, auto-enabling is evil
     if update.message.new_chat_member and update.message.new_chat_member.id \
             == my_user_id or update.message.group_chat_created:
             db.savegroup(update.message.chat_id, update.message.chat.title)
-            # FIXME translate into minutes
-            job = Job(senddigest, 10, repeat=True)
-            chat_data['job'] = job
-            job_queue.put(job)
     elif update.message.left_chat_member:
         if update.message.left_chat_member.id == my_user_id:
             db.delgroup(update.message.chat_id)
-            if 'job' in chat_data:
-                job = chat_data['job']
-                job.schedule_removel()
-                del chat_data['job']
 
 
 def texthandler(bot, update):
@@ -240,6 +237,45 @@ def texthandler(bot, update):
 def dumpmessages_h(bot, update):
     chat_id = update.message.chat.id
     return dumpmessages(chat_id)
+
+
+def enable_h(bot, update, job_queue, chat_data):
+    chat_id = update.message.chat.id
+    fromemail, mailinglist, enabled = db.getaddresses(chat_id)
+    if not fromemail:
+        bot.sendMessage(chat_id=update.message.chat_id,
+                        text="Can not enable the bot, missing 'From' email")
+        return
+    if not mailinglist:
+        bot.sendMessage(chat_id=update.message.chat_id,
+                        text="Can not enable the bot, missing 'mailinglist'"
+                             " email")
+        return
+    if not enabled:
+        if db.enable(chat_id):
+            bot.sendMessage(chat_id=update.message.chat_id,
+                            text="Ok, will send digest once every %s minutes"
+                            " to %s from %s" %
+                            (str(sendinterval), mailinglist, fromemail))
+
+            # TODO interval should be a command parameter, with a lower bound
+            job = Job(senddigest, sendinterval*60, repeat=True)
+            chat_data['job'] = job
+            job_queue.put(job)
+    else:
+            bot.sendMessage(chat_id=update.message.chat_id,
+                            text="Group already enabled")
+
+
+def disable_h(bot, update, job_queue, chat_data):
+    chat_id = update.message.chat.id
+    if db.disable(chat_id):
+            bot.sendMessage(chat_id=update.message.chat_id,
+                            text="Group disabled")
+            if 'job' in chat_data:
+                job = chat_data['job']
+                job.schedule_removel()
+                del chat_data['job']
 
 
 def unknown(bot, update):
@@ -265,12 +301,20 @@ def run():
     dispatcher.add_handler(start_handler)
     mailinglist_handler = CommandHandler('mailinglist', mailinglist)
     dispatcher.add_handler(mailinglist_handler)
-    fromaddress_handler = CommandHandler('from', fromaddress)
-    dispatcher.add_handler(fromaddress_handler)
+    #fromaddress_handler = CommandHandler('from', fromaddress)
+    #dispatcher.add_handler(fromaddress_handler)
     dumpmessages_handler = CommandHandler('messages', dumpmessages_h)
     dispatcher.add_handler(dumpmessages_handler)
     sendmessages_handler = CommandHandler('sendmessages', sendmessages_h)
     dispatcher.add_handler(sendmessages_handler)
+
+    enable_handler = CommandHandler('enable', enable_h,
+                                    pass_job_queue=True, pass_chat_data=True)
+    dispatcher.add_handler(enable_handler)
+
+    disable_handler = CommandHandler('disable', disable_h,
+                                     pass_job_queue=True, pass_chat_data=True)
+    dispatcher.add_handler(disable_handler)
 
     unknown_handler = MessageHandler(Filters.command, unknown)
     dispatcher.add_handler(unknown_handler)
