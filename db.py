@@ -116,8 +116,6 @@ def disable(chat_id):
     return True
 
 
-
-
 def get_active_groups():
     m = config.select(config.groupid).where(config.enabled)
     return [g.groupid for g in m]

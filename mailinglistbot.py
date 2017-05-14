@@ -134,8 +134,12 @@ def sendmessages(chat_id):
     fr, ml, enabled = db.getaddresses(chat_id)
     if fr and ml and enabled:
         m = dumpmessages(chat_id)
-        sendemail(m, "", fr, ml)
-        logger.info("Sent digest email for group "+str(chat_id))
+        if m:
+            sendemail(m, "", fr, ml)
+            logger.info("Sent digest email for group " +
+                        str(chat_id.groupname) + " to " + str(ml))
+        else:
+            logger.info("No message to send for group" + str(chat_id))
     else:
         logger.info("Won't send email, as I am missing addresses for group " +
                     str(chat_id) + " or conf is disabled")
@@ -164,7 +168,6 @@ def sendemail(body, groupname, fromemail, mailinglist):
 
 def senddigest(bot=None, job=None):
     groups = db.get_active_groups()
-    print groups
     logger.info("Starting to send digest messages")
     for g in groups:
         sendmessages(g)
@@ -322,8 +325,7 @@ def run():
     text_handler = MessageHandler(Filters.text, texthandler)
     dispatcher.add_handler(text_handler)
 
-    message_handler = MessageHandler(Filters.all, messagehandler,
-                                     pass_job_queue=True, pass_chat_data=True)
+    message_handler = MessageHandler(Filters.all, messagehandler)
     dispatcher.add_handler(message_handler)
 
     updater.start_polling()
