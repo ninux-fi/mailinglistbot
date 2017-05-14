@@ -70,7 +70,7 @@ def parsemail(mail_string):
             logging.debug("Extraced valid email %s" % email)
             return email
 
-    logging.debug("Could not extrac valid email %s" % mail_string)
+    logging.debug("Could not extract valid email %s" % mail_string)
     return ''
 
 
@@ -129,9 +129,12 @@ def dumpmessages(chat_id):
 def sendmessages(chat_id):
 
     fr, ml = db.getaddresses(chat_id)
-    m = dumpmessages(chat_id)
-    sendemail(m, "", fr, ml)
-    logger.info("Sent digest email for group "+str(chat_id))
+    if fr and ml:
+        m = dumpmessages(chat_id)
+        sendemail(m, "", fr, ml)
+        logger.info("Sent digest email for group "+str(chat_id))
+    else:
+        logger.info("Won't send email, as I am missing addresses for group "+str(chat_id))
 
 
 def sendemail(body, groupname, fromemail, mailinglist):
@@ -209,6 +212,7 @@ def fromaddress(bot, update):
 def messagehandler(bot, update, job_queue, chat_data):
 
     # FIXME we need a Filter for this, not do it here
+    # FIXME: we also need an /enable command, auto-enabling is evil
     if update.message.new_chat_member and update.message.new_chat_member.id \
             == my_user_id or update.message.group_chat_created:
             db.savegroup(update.message.chat_id, update.message.chat.title)
