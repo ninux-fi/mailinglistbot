@@ -108,7 +108,8 @@ def prettyprintright(ul, u, d, s):
 
 
 def dumpmessages(chat_id):
-    msgs = db.dumpmessages(chat_id)
+    starting_date = datetime.datetime.now() - datetime.timedelta(minutes=sendinterval)
+    msgs = db.dumpmessages(chat_id, fromdate=starting_date)
     s = StringIO()
     left = True
     if len(msgs):
@@ -201,8 +202,8 @@ def mailinglist(bot, update):
 
 
 def fromaddress(bot, update):
-    pass
     # I decided to keep the from email static to bot@firenze.ninux.network
+    pass
     logging.debug("Received message: " + str(update))
     email = parsemail(update.message.text)
     if email:
@@ -261,7 +262,6 @@ def enable_h(bot, update, job_queue, chat_data):
                             " to %s from %s" %
                             (str(sendinterval), mailinglist, fromemail))
 
-            # TODO interval should be a command parameter, with a lower bound
             job = Job(senddigest, sendinterval*60, repeat=True)
             chat_data['job'] = job
             job_queue.put(job)
