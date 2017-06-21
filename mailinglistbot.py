@@ -78,7 +78,7 @@ def parsemail(mail_string):
 
 
 def prettyprintleft(ul, u, d, s):
-    l = ul.encode('ascii', 'ignore').encode('ascii')
+    l = ul.encode('utf8', 'ignore').encode('utf8')
     left_margin = 32  # max username width
     if d:
         print >> s, ""
@@ -93,7 +93,7 @@ def prettyprintleft(ul, u, d, s):
 
 def prettyprintright(ul, u, d, s):
 
-    l = ul.encode('ascii', 'ignore').encode('ascii')
+    l = ul.encode('utf8', 'ignore').encode('utf8')
     left_margin = 32  # max username width
     if d:
         print >> s, ""
@@ -148,7 +148,7 @@ def sendmessages(chat_id):
 
 def sendemail(body, groupname, fromemail, mailinglist):
 
-    msg = MIMEText(body)
+    msg = MIMEText(body, _charset='utf-8')
 
     msg['Subject'] = "[mailinglistbot] Digest conversations from"\
                      " Telegram group " + groupname
